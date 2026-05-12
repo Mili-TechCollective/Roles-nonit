@@ -195,6 +195,24 @@
     }
     .role-card:hover { border-color: var(--light-blue); transform: translateY(-2px); box-shadow: 0 8px 32px rgba(10,82,217,0.2); }
     .role-card:hover::before { opacity: 1; }
+    .role-card.is-contratado {
+      background: linear-gradient(135deg, rgba(105,218,185,0.12) 0%, rgba(105,218,185,0.05) 100%);
+      border-color: rgba(105,218,185,0.45);
+    }
+    .role-card.is-contratado::before {
+      background: linear-gradient(90deg, #69DAB9, #3ec9a7);
+      opacity: 1;
+    }
+    .role-card.is-contratado:hover {
+      border-color: #69DAB9;
+      box-shadow: 0 8px 32px rgba(105,218,185,0.25);
+    }
+    .role-card.is-contratado .role-card-title { color: #69DAB9; }
+    .contratado-crown {
+      font-size: 18px;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
     .role-card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
     .role-card-title { font-family: 'Gowun Batang', serif; font-size: 17px; color: #fff; margin-bottom: 2px; }
     .role-card-company { font-size: 12px; color: var(--muted); font-weight: 500; }
@@ -464,6 +482,24 @@
     .toast.success { border-left: 3px solid var(--green); }
     .toast.error { border-left: 3px solid var(--pink); }
 
+    /* ─── CSV Preview Modal ─── */
+    .csv-preview-table-wrap { max-height: 320px; overflow-y: auto; margin: 16px 0; border-radius: 10px; border: 1px solid var(--border); }
+    .csv-preview-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    .csv-preview-table thead tr { background: var(--surface2); position: sticky; top: 0; z-index: 2; }
+    .csv-preview-table th { padding: 9px 12px; text-align: left; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+    .csv-preview-table td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text); }
+    .csv-preview-table tbody tr:hover { background: var(--surface2); }
+    .csv-map-row { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .csv-map-label { font-size: 12px; font-weight: 600; color: var(--light-blue); background: rgba(90,133,255,0.12); border: 1px solid rgba(90,133,255,0.25); border-radius: 6px; padding: 5px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .csv-map-arrow { color: var(--muted); font-size: 14px; }
+    .csv-section-title { font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; margin: 20px 0 10px; }
+    .csv-error { background: rgba(255,105,157,0.1); border: 1px solid rgba(255,105,157,0.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--pink); margin-bottom: 12px; }
+    .csv-warning { background: rgba(255,235,144,0.1); border: 1px solid rgba(255,235,144,0.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--yellow); margin-bottom: 12px; }
+    .csv-success { background: rgba(105,218,185,0.1); border: 1px solid rgba(105,218,185,0.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--green); margin-bottom: 12px; }
+    .modal-wide { max-width: 780px; }
+    .bulk-status-bar { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; flex-wrap: wrap; }
+    .bulk-status-bar label { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
+
     /* ─── Scrollbar ─── */
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
@@ -578,11 +614,11 @@
         </select>
         <button class="btn btn-primary btn-sm" onclick="openTalentModal()">+ Agregar talento</button>
         <button class="btn btn-secondary btn-sm" onclick="document.getElementById('csvFile').click()">📥 Importar CSV</button>
-        <input type="file" id="csvFile" accept=".csv" onchange="handleCSV(this)">
+        <input type="file" id="csvFile" accept=".csv" onchange="previewCSV(this)">
       </div>
 
       <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
-        CSV esperado: <code style="color:var(--light-blue)">nombre,apellido,email,telefono,status</code> — status: invitado | hireflix | entrevista_cliente | contratado
+        CSV esperado: <code style="color:var(--light-blue)">nombre, apellido, email, telefono, status</code> &nbsp;·&nbsp; Podés mapear las columnas antes de importar.
       </p>
 
       <div class="table-wrap">
@@ -702,6 +738,54 @@
     <div class="form-actions">
       <button class="btn btn-ghost" onclick="closeModal('modal-talent')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveTalent()">Guardar talento</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════════════════════
+     MODAL: CSV PREVIEW & MAPPING
+══════════════════════════════════════════════════ -->
+<div class="overlay" id="modal-csv" onclick="closeModalIfBackdrop(event,'modal-csv')">
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <div class="modal-title">Importar CSV — Vista previa</div>
+      <button class="modal-close" onclick="closeModal('modal-csv')">✕</button>
+    </div>
+
+    <div id="csv-validation-msg"></div>
+
+    <!-- Column mapping -->
+    <p class="csv-section-title">Mapeo de columnas</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:12px">Indicá qué columna de tu CSV corresponde a cada campo.</p>
+    <div id="csv-mapping-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px 20px;margin-bottom:4px"></div>
+
+    <!-- Bulk status -->
+    <p class="csv-section-title">Status masivo</p>
+    <div class="bulk-status-bar">
+      <label>Asignar a todos los talentos importados:</label>
+      <select class="form-select" id="csv-bulk-status" style="width:auto;min-width:200px">
+        <option value="">— Usar el status del CSV —</option>
+        <option value="invitado">Invitado</option>
+        <option value="hireflix">Hireflix</option>
+        <option value="entrevista_cliente">Entrevista con cliente</option>
+        <option value="contratado">Contratado</option>
+      </select>
+      <span style="font-size:11px;color:var(--muted)">(sobreescribe el status de cada fila)</span>
+    </div>
+
+    <!-- Preview table -->
+    <p class="csv-section-title">Preview <span id="csv-preview-count" style="color:var(--light-blue)"></span></p>
+    <div class="csv-preview-table-wrap">
+      <table class="csv-preview-table">
+        <thead><tr id="csv-preview-head"></tr></thead>
+        <tbody id="csv-preview-body"></tbody>
+      </table>
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-ghost" onclick="closeModal('modal-csv')">Cancelar</button>
+      <button class="btn btn-primary" id="csv-confirm-btn" onclick="confirmCSVImport()">✅ Confirmar importación</button>
     </div>
   </div>
 </div>
@@ -834,10 +918,11 @@ function renderDashboard() {
     Object.keys(TALENT_STATUSES).forEach(s => counts[s] = 0);
     (r.talentos || []).forEach(t => { if (counts[t.status] !== undefined) counts[t.status]++; });
     const total = (r.talentos||[]).length;
-    return `<div class="role-card" onclick="renderRolePage('${r.id}')">
+    const isContratado = r.status === 'contratado';
+    return `<div class="role-card${isContratado ? ' is-contratado' : ''}" onclick="renderRolePage('${r.id}')">
       <div class="role-card-header">
         <div>
-          <div class="role-card-title">${esc(r.rol)}</div>
+          <div class="role-card-title">${esc(r.rol)}${isContratado ? '<span class="contratado-crown" title="Contratado">✅</span>' : ''}</div>
           <div class="role-card-company">${esc(r.empresa)}</div>
         </div>
         <div class="role-card-actions" onclick="event.stopPropagation()">
@@ -1048,35 +1133,168 @@ function deleteTalent(talentId) {
 }
 
 // ─── CSV ─────────────────────────────────────────────
-function handleCSV(input) {
+// ─── CSV PREVIEW & MAPPING ───────────────────────────────────────────────────
+let csvParsed = { headers: [], rows: [], raw: [] };
+
+function parseCSVLine(line) {
+  // Handles quoted fields with commas inside
+  const result = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') { inQ = !inQ; }
+    else if (c === ',' && !inQ) { result.push(cur.trim()); cur = ''; }
+    else { cur += c; }
+  }
+  result.push(cur.trim());
+  return result;
+}
+
+function guessColumn(headers, candidates) {
+  for (const c of candidates) {
+    const idx = headers.findIndex(h => h.toLowerCase().includes(c));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
+function previewCSV(input) {
   const file = input.files[0];
   if (!file) return;
   const reader = new FileReader();
   reader.onload = (e) => {
-    const lines = e.target.result.trim().split('\n');
-    const r = state.roles.find(x => x.id === currentRoleId);
-    if (!r) return;
-    let added = 0, skipped = 0;
-    const validStatuses = Object.keys(TALENT_STATUSES);
-    // Skip header if first line contains "nombre" or "name"
-    let start = 0;
-    if (lines[0].toLowerCase().includes('nombre') || lines[0].toLowerCase().includes('name')) start = 1;
-    for (let i = start; i < lines.length; i++) {
-      const parts = lines[i].split(',').map(s => s.trim().replace(/^"|"$/g,''));
-      if (parts.length < 2) { skipped++; continue; }
-      const [nombre, apellido, email='', phone='', rawStatus='invitado'] = parts;
-      if (!nombre) { skipped++; continue; }
-      const status = validStatuses.includes(rawStatus) ? rawStatus : 'invitado';
-      r.talentos.push({ id: uid(), nombre, apellido, email, phone, status, createdAt: Date.now() });
-      added++;
+    const text = e.target.result;
+    const lines = text.trim().split(/\r?\n/);
+    if (lines.length < 2) { toast('El CSV está vacío o solo tiene encabezado.', 'error'); input.value=''; return; }
+
+    // Detect separator (comma or semicolon)
+    const sep = lines[0].includes(';') ? ';' : ',';
+    const headers = lines[0].split(sep).map(h => h.trim().replace(/^"|"$/g,''));
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+      if (!lines[i].trim()) continue;
+      const parts = lines[i].split(sep).map(s => s.trim().replace(/^"|"$/g,''));
+      rows.push(parts);
     }
-    save();
-    toast(`${added} talento${added!==1?'s':''} importado${added!==1?'s':''}${skipped?' ('+skipped+' omitido'+( skipped!==1?'s':'')+')':''}.`);
-    renderPipeline(r);
-    renderTalentTable();
+    csvParsed = { headers, rows, sep };
+
+    // Auto-guess column mapping
+    const guesses = {
+      nombre:   guessColumn(headers, ['nombre','name','first','primeiro']),
+      apellido: guessColumn(headers, ['apellido','last','sobrenome','surname']),
+      email:    guessColumn(headers, ['email','mail','correo','e-mail']),
+      phone:    guessColumn(headers, ['phone','telefono','telef','tel','celular','mobile','fone']),
+      status:   guessColumn(headers, ['status','estado','stage','etapa']),
+    };
+
+    // Build mapping selects
+    const fields = [
+      { key:'nombre',   label:'Nombre *' },
+      { key:'apellido', label:'Apellido' },
+      { key:'email',    label:'Email' },
+      { key:'phone',    label:'Teléfono' },
+      { key:'status',   label:'Status' },
+    ];
+    const mapGrid = document.getElementById('csv-mapping-grid');
+    mapGrid.innerHTML = fields.map(f => {
+      const opts = ['<option value="-1">— No usar —</option>',
+        ...headers.map((h,i) => `<option value="${i}" ${guesses[f.key]===i?'selected':''}>${h}</option>`)
+      ].join('');
+      return `<div style="display:flex;flex-direction:column;gap:5px">
+        <label class="form-label">${f.label}</label>
+        <select class="form-select" id="csv-map-${f.key}" onchange="refreshCSVPreview()" style="font-size:13px">${opts}</select>
+      </div>`;
+    }).join('');
+
+    // Validation message
+    const msgEl = document.getElementById('csv-validation-msg');
+    if (guesses.nombre < 0) {
+      msgEl.innerHTML = '<div class="csv-error">⚠️ No se detectó la columna "Nombre" automáticamente. Por favor mapéala manualmente.</div>';
+    } else {
+      msgEl.innerHTML = `<div class="csv-success">✅ ${rows.length} filas detectadas. Revisá el mapeo y confirmá la importación.</div>`;
+    }
+
+    refreshCSVPreview();
+    openModal('modal-csv');
     input.value = '';
   };
-  reader.readAsText(file);
+  reader.readAsText(file, 'UTF-8');
+}
+
+function getCSVMapping() {
+  return {
+    nombre:   parseInt(document.getElementById('csv-map-nombre')?.value ?? -1),
+    apellido: parseInt(document.getElementById('csv-map-apellido')?.value ?? -1),
+    email:    parseInt(document.getElementById('csv-map-email')?.value ?? -1),
+    phone:    parseInt(document.getElementById('csv-map-phone')?.value ?? -1),
+    status:   parseInt(document.getElementById('csv-map-status')?.value ?? -1),
+  };
+}
+
+function refreshCSVPreview() {
+  const map = getCSVMapping();
+  const { headers, rows } = csvParsed;
+  const validStatuses = Object.keys(TALENT_STATUSES);
+  const bulkStatus = document.getElementById('csv-bulk-status')?.value || '';
+
+  // Head
+  const headEl = document.getElementById('csv-preview-head');
+  const fields = ['Nombre','Apellido','Email','Teléfono','Status'];
+  headEl.innerHTML = fields.map(f=>`<th>${f}</th>`).join('') + '<th>Estado</th>';
+
+  // Rows (show max 8 in preview)
+  const bodyEl = document.getElementById('csv-preview-body');
+  const preview = rows.slice(0, 50);
+  document.getElementById('csv-preview-count').textContent = `(${rows.length} filas · mostrando ${Math.min(rows.length,50)})`;
+
+  bodyEl.innerHTML = preview.map(row => {
+    const get = (idx) => idx >= 0 && idx < row.length ? row[idx] : '';
+    const nombre = get(map.nombre);
+    const apellido = get(map.apellido);
+    const email = get(map.email);
+    const phone = get(map.phone);
+    const rawSt = get(map.status);
+    const resolvedStatus = bulkStatus || (validStatuses.includes(rawSt) ? rawSt : 'invitado');
+    const sc = TALENT_STATUSES[resolvedStatus] || TALENT_STATUSES.invitado;
+    const valid = !!nombre;
+    return `<tr style="${!valid ? 'opacity:0.4' : ''}">
+      <td style="font-weight:600;color:#fff">${esc(nombre) || '<em style="color:var(--muted)">vacío</em>'}</td>
+      <td>${esc(apellido)}</td>
+      <td style="color:var(--muted);font-size:11px">${esc(email)}</td>
+      <td style="color:var(--muted);font-size:11px">${esc(phone)}</td>
+      <td><span style="font-size:11px;font-weight:600;color:${sc.color}">${sc.label}</span></td>
+      <td>${valid ? '✅' : '⛔ sin nombre'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function confirmCSVImport() {
+  const map = getCSVMapping();
+  if (map.nombre < 0) { toast('Mapeá la columna Nombre antes de importar.', 'error'); return; }
+  const { rows } = csvParsed;
+  const validStatuses = Object.keys(TALENT_STATUSES);
+  const bulkStatus = document.getElementById('csv-bulk-status')?.value || '';
+  const r = state.roles.find(x => x.id === currentRoleId);
+  if (!r) return;
+  let added = 0, skipped = 0;
+  rows.forEach(row => {
+    const get = (idx) => idx >= 0 && idx < row.length ? row[idx].trim() : '';
+    const nombre = get(map.nombre);
+    if (!nombre) { skipped++; return; }
+    const apellido = get(map.apellido);
+    const email = get(map.email);
+    const phone = get(map.phone);
+    const rawSt = get(map.status);
+    const status = bulkStatus || (validStatuses.includes(rawSt) ? rawSt : 'invitado');
+    r.talentos.push({ id: uid(), nombre, apellido, email, phone, status, createdAt: Date.now() });
+    added++;
+  });
+  save();
+  closeModal('modal-csv');
+  toast(`${added} talento${added!==1?'s':''} importado${added!==1?'s':''}${skipped?' · '+skipped+' omitido'+(skipped!==1?'s':''):''}.`);
+  const rr = state.roles.find(x => x.id === currentRoleId);
+  renderPipeline(rr);
+  renderTalentTable();
 }
 
 // ─── TABS ────────────────────────────────────────────
