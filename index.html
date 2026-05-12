@@ -497,6 +497,30 @@
     .csv-warning { background: rgba(255,235,144,0.1); border: 1px solid rgba(255,235,144,0.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--yellow); margin-bottom: 12px; }
     .csv-success { background: rgba(105,218,185,0.1); border: 1px solid rgba(105,218,185,0.3); border-radius: 8px; padding: 10px 14px; font-size: 13px; color: var(--green); margin-bottom: 12px; }
     .modal-wide { max-width: 780px; }
+    /* ─── Selection bar ─── */
+    .selection-bar {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 16px;
+      background: rgba(90,133,255,0.1);
+      border: 1px solid rgba(90,133,255,0.3);
+      border-radius: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .selection-bar.visible { display: flex; }
+    .selection-bar-count { font-size: 13px; font-weight: 600; color: var(--light-blue); }
+    .cb-talent {
+      width: 16px; height: 16px; cursor: pointer;
+      accent-color: var(--light-blue);
+    }
+    .cb-all {
+      width: 16px; height: 16px; cursor: pointer;
+      accent-color: var(--light-blue);
+    }
+    th.th-cb, td.td-cb { width: 36px; padding-left: 14px; }
+
     .bulk-status-bar { display: flex; align-items: center; gap: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 16px; flex-wrap: wrap; }
     .bulk-status-bar label { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; }
 
@@ -617,6 +641,15 @@
         <input type="file" id="csvFile" accept=".csv" onchange="previewCSV(this)">
       </div>
 
+      <!-- Selection action bar -->
+      <div class="selection-bar" id="selection-bar">
+        <span class="selection-bar-count" id="selection-count">0 seleccionados</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteSelected()">🗑 Borrar seleccionados</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearSelection()">✕ Deseleccionar todo</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-danger btn-sm" style="background:rgba(255,105,157,0.2);border-color:rgba(255,105,157,0.5)" onclick="deleteAllTalents()">⚠️ Borrar TODOS los talentos</button>
+      </div>
+
       <p style="font-size:11px;color:var(--muted);margin-bottom:10px">
         CSV esperado: <code style="color:var(--light-blue)">nombre, apellido, email, telefono, status</code> &nbsp;·&nbsp; Podés mapear las columnas antes de importar.
       </p>
@@ -625,6 +658,7 @@
         <table>
           <thead>
             <tr>
+              <th class="th-cb"><input type="checkbox" class="cb-all" id="cb-all" title="Seleccionar todos" onchange="toggleSelectAll(this.checked)"></th>
               <th>Nombre</th>
               <th>Email</th>
               <th>Teléfono</th>
@@ -781,6 +815,23 @@
         <thead><tr id="csv-preview-head"></tr></thead>
         <tbody id="csv-preview-body"></tbody>
       </table>
+    </div>
+
+    <p class="csv-section-title">Comportamiento si el talento ya existe</p>
+    <div class="bulk-status-bar" style="margin-bottom:20px">
+      <label>Si el email ya está cargado:</label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="csv-dedup" value="update" checked style="accent-color:var(--light-blue)"> Actualizar datos y status
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="csv-dedup" value="skip" style="accent-color:var(--light-blue)"> Ignorar (no tocar el existente)
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;color:var(--text)">
+          <input type="radio" name="csv-dedup" value="add" style="accent-color:var(--light-blue)"> Crear siempre como nuevo
+        </label>
+      </div>
+      <span style="font-size:11px;color:var(--muted);width:100%;margin-top:2px">Match por email. Si no hay email en el CSV, siempre crea nuevo.</span>
     </div>
 
     <div class="form-actions">
@@ -1027,9 +1078,14 @@ function renderTalentTable() {
     return;
   }
   emptyEl.style.display = 'none';
+  // Preserve existing selections
+  const prevSelected = getSelectedIds();
+
   tbody.innerHTML = talentos.map(t => {
     const sc = TALENT_STATUSES[t.status] || TALENT_STATUSES.invitado;
-    return `<tr>
+    const checked = prevSelected.has(t.id) ? 'checked' : '';
+    return `<tr data-id="${t.id}" class="${prevSelected.has(t.id)?'row-selected':''}">
+      <td class="td-cb"><input type="checkbox" class="cb-talent" ${checked} data-id="${t.id}" onchange="onRowCheck(this)"></td>
       <td><div class="td-name">${esc(t.nombre)} ${esc(t.apellido)}</div></td>
       <td><div class="td-email">${esc(t.email||'—')}</div></td>
       <td><div class="td-phone">${esc(t.phone||'—')}</div></td>
@@ -1045,6 +1101,7 @@ function renderTalentTable() {
       </td>
     </tr>`;
   }).join('');
+  updateSelectionBar();
 }
 
 function updateTalentStatus(talentId, newStatus) {
@@ -1274,26 +1331,119 @@ function confirmCSVImport() {
   const { rows } = csvParsed;
   const validStatuses = Object.keys(TALENT_STATUSES);
   const bulkStatus = document.getElementById('csv-bulk-status')?.value || '';
+  const dedupMode = document.querySelector('input[name="csv-dedup"]:checked')?.value || 'update';
   const r = state.roles.find(x => x.id === currentRoleId);
   if (!r) return;
-  let added = 0, skipped = 0;
+
+  let added = 0, updated = 0, skipped = 0, ignored = 0;
+
   rows.forEach(row => {
     const get = (idx) => idx >= 0 && idx < row.length ? row[idx].trim() : '';
     const nombre = get(map.nombre);
     if (!nombre) { skipped++; return; }
     const apellido = get(map.apellido);
-    const email = get(map.email);
-    const phone = get(map.phone);
-    const rawSt = get(map.status);
-    const status = bulkStatus || (validStatuses.includes(rawSt) ? rawSt : 'invitado');
-    r.talentos.push({ id: uid(), nombre, apellido, email, phone, status, createdAt: Date.now() });
+    const email    = get(map.email).toLowerCase();
+    const phone    = get(map.phone);
+    const rawSt    = get(map.status);
+    const status   = bulkStatus || (validStatuses.includes(rawSt) ? rawSt : 'invitado');
+
+    // Try to find existing talent by email
+    const existing = email ? r.talentos.find(t => (t.email||'').toLowerCase() === email) : null;
+
+    if (existing && dedupMode === 'skip') {
+      ignored++; return;
+    }
+    if (existing && dedupMode === 'update') {
+      existing.nombre   = nombre;
+      existing.apellido = apellido;
+      existing.email    = get(map.email);
+      existing.phone    = phone;
+      existing.status   = status;
+      updated++; return;
+    }
+    // dedupMode === 'add' OR no existing match → create new
+    r.talentos.push({ id: uid(), nombre, apellido, email: get(map.email), phone, status, createdAt: Date.now() });
     added++;
   });
+
   save();
   closeModal('modal-csv');
-  toast(`${added} talento${added!==1?'s':''} importado${added!==1?'s':''}${skipped?' · '+skipped+' omitido'+(skipped!==1?'s':''):''}.`);
+
+  const parts = [];
+  if (added)   parts.push(`${added} nuevo${added!==1?'s':''}`);
+  if (updated) parts.push(`${updated} actualizado${updated!==1?'s':''}`);
+  if (ignored) parts.push(`${ignored} ignorado${ignored!==1?'s':''}`);
+  if (skipped) parts.push(`${skipped} omitido${skipped!==1?'s':''} (sin nombre)`);
+  toast('✅ ' + parts.join(' · '));
+
   const rr = state.roles.find(x => x.id === currentRoleId);
   renderPipeline(rr);
+  renderTalentTable();
+}
+
+// ─── SELECTION ───────────────────────────────────────────────────────────────
+function getSelectedIds() {
+  const cbs = document.querySelectorAll('.cb-talent:checked');
+  return new Set([...cbs].map(cb => cb.dataset.id));
+}
+
+function updateSelectionBar() {
+  const ids = getSelectedIds();
+  const count = ids.size;
+  const bar = document.getElementById('selection-bar');
+  const countEl = document.getElementById('selection-count');
+  bar.classList.toggle('visible', count > 0);
+  if (countEl) countEl.textContent = `${count} seleccionado${count !== 1 ? 's' : ''}`;
+  // Sync "select all" checkbox state
+  const cbAll = document.getElementById('cb-all');
+  const total = document.querySelectorAll('.cb-talent').length;
+  if (cbAll) {
+    cbAll.checked = count > 0 && count === total;
+    cbAll.indeterminate = count > 0 && count < total;
+  }
+  // Highlight selected rows
+  document.querySelectorAll('.cb-talent').forEach(cb => {
+    cb.closest('tr').style.background = cb.checked ? 'rgba(90,133,255,0.08)' : '';
+  });
+}
+
+function onRowCheck(cb) { updateSelectionBar(); }
+
+function toggleSelectAll(checked) {
+  document.querySelectorAll('.cb-talent').forEach(cb => { cb.checked = checked; });
+  updateSelectionBar();
+}
+
+function clearSelection() {
+  document.querySelectorAll('.cb-talent').forEach(cb => { cb.checked = false; });
+  const cbAll = document.getElementById('cb-all');
+  if (cbAll) { cbAll.checked = false; cbAll.indeterminate = false; }
+  updateSelectionBar();
+}
+
+function deleteSelected() {
+  const ids = getSelectedIds();
+  if (!ids.size) return;
+  if (!confirm(`¿Eliminar ${ids.size} talento${ids.size !== 1 ? 's' : ''} seleccionado${ids.size !== 1 ? 's' : ''}?`)) return;
+  const r = state.roles.find(x => x.id === currentRoleId);
+  if (!r) return;
+  r.talentos = r.talentos.filter(t => !ids.has(t.id));
+  save();
+  toast(`🗑 ${ids.size} talento${ids.size !== 1 ? 's' : ''} eliminado${ids.size !== 1 ? 's' : ''}.`);
+  renderPipeline(r);
+  renderTalentTable();
+}
+
+function deleteAllTalents() {
+  const r = state.roles.find(x => x.id === currentRoleId);
+  if (!r) return;
+  const total = r.talentos.length;
+  if (!total) { toast('No hay talentos para eliminar.', 'error'); return; }
+  if (!confirm(`⚠️ Esto va a eliminar los ${total} talentos de este rol. ¿Estás seguro?`)) return;
+  r.talentos = [];
+  save();
+  toast(`🗑 ${total} talento${total !== 1 ? 's' : ''} eliminado${total !== 1 ? 's' : ''}.`);
+  renderPipeline(r);
   renderTalentTable();
 }
 
